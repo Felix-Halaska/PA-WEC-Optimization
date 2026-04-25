@@ -1,0 +1,255 @@
+#library imports
+import grama as gr
+import numpy as np
+import pandas as pd
+from scipy.integrate import solve_ivp, quad, trapezoid
+from abstracted_helper_functions import evaluate_ode
+import matplotlib
+matplotlib.use('TkAgg') # Or 'QtAgg' if you installed PyQt
+import matplotlib.pyplot as plt
+from gaussian_wave_model import gp_fit, optimize_hyperparameter, hyperparmeter_sweep, generate_waveform
+DF = gr.Intention()
+pd.set_option('display.max_columns', None)
+
+##BEGIN USER INPUT
+
+#define mean wave conditions
+wave_amplitude = 0.2
+wave_frequency = 1
+wave_phase_shift = 0
+
+#define time to evaluate system response
+start_time = 0
+end_time = 10
+resolution = 20
+n_points = resolution*(end_time-start_time)
+
+#choose number of wave realizations to test
+n_realization = 20
+
+#choose number of restarts to avoid local minima
+restarts = 25
+
+##END USER INPUT
+
+#generate time series
+t_span = np.linspace(start_time, end_time, n_points).reshape(-1, 1)
+
+##start GP fitting generation
+
+#package wave and time parameters
+wave_parameters = [wave_amplitude,wave_frequency,wave_phase_shift]
+time_series = [start_time,end_time,n_points]
+
+#create discretized sine wave
+sine_wave = gp_fit(wave_parameters, time_series)
+
+#perform hyperparameter sweep
+df_cv_summary = hyperparmeter_sweep(sine_wave)
+
+#plot hyperparameter sweep results
+plt.fill_between(df_cv_summary.l, df_cv_summary.ndme_lo, df_cv_summary.ndme_hi, alpha=1/3)
+plt.plot(df_cv_summary.l, df_cv_summary.ndme_mu)
+plt.xscale('log')
+plt.yscale('log')
+plt.xlim(1e-3, 1e+1)
+plt.xlabel("Hyperparameter l (-)")
+plt.ylabel("Error metric")
+plt.show()
+
+##BEGIN USER INPUT
+
+#User chosen length scale parameter
+l = 0.5
+
+##END USER INPUT
+
+#define empty dataframes to store results
+results = pd.DataFrame()
+all_results = pd.DataFrame()
+
+#iterate through each realization
+for realization in range(n_realization):
+
+    #generate a random wave
+    random_wave = generate_waveform(l, t_span)
+
+    ##plot each generated random wave
+    # plt.plot(t_span, random_wave, label="Generated Wave")
+    # plt.xlabel("Time")
+    # plt.ylabel("Amplitude")
+    # plt.legend()
+    # plt.show()
+
+    def solve (df):
+        """
+        Helper function to solve system response and return desired output metrics
+
+        Args:
+        df (dataframe): Contains the design variables of the system (m,b,k,c,q)
+
+        Returns:
+        dataframe: Contains the negative average system velocity and the absolute max system extension
+        """
+        #evaluate the system response
+        tmp = evaluate_ode([start_time,end_time,n_points], df, t_span, random_wave)
+
+        #compute the average velocity of the system
+        avg_velocity = np.mean(abs(tmp.y[1]))
+        
+        return gr.df_make(
+            vel_min = -1*avg_velocity,
+            pos_max = (max(abs(tmp.y[0]))).squeeze(),
+        )
+    
+    #define the optimization model
+    md_det_abs = (
+        gr.Model()
+        >> gr.cp_vec_function(
+            fun=solve,
+            var=["m", "b", "k", "c", "q"],
+            out=["vel_min", "pos_max"],
+        )
+        >> gr.cp_bounds(
+            #wide ranges selected to allow for system exploration
+            m =(1e2, 1e4),
+            b = (1e1, 1e2),
+            k=(1e1, 1e4),
+            c=(1e0,1e2),
+            q=(1e2,1e3),
+        )
+    )
+
+    #add function to enforce the minimum extension limit
+    md_det_abs = (
+        md_det_abs
+        >> gr.cp_vec_function(
+                fun = lambda df: gr.df_make(
+                    min_extension = 10 - df.pos_max
+                ),
+                var = ["pos_max"],
+                out = ["min_extension"]
+            )
+    )
+
+    #add function to enforce the maximum extension limit
+    md_det_abs = (
+        md_det_abs
+        >> gr.cp_vec_function(
+                fun = lambda df: gr.df_make(
+                    max_extension = df.pos_max - 10
+                ),
+                var = ["pos_max"],
+                out = ["max_extension"]
+            )
+    )
+
+    #minimize the negative average velocity of the system
+    df_wec_opt = (
+        md_det_abs
+        >> gr.ev_min(
+            out_min="vel_min",
+            out_leq=["max_extension"],
+            out_geq = ["min_extension"],
+            n_restart=restarts,
+        )
+    )
+
+    #filter out failed optimization attempts, and flip power sign
+    df_wec_opt = (
+        df_wec_opt
+        >> gr.tf_filter(DF.success==True)
+        >> gr.tf_mutate(
+            vel_max = DF.vel_min * -1
+        )
+    )
+
+    #find the optimal system configuration
+    df_wec_max = (
+        df_wec_opt
+        >> gr.tf_arrange(-DF.vel_max)
+        >> gr.tf_head(1)
+    )
+
+    #add optimal results to dataframe
+    results = pd.concat([results, df_wec_max], ignore_index=True)
+    
+    ##plot all results for the wave realization
+    # fig, axs = plt.subplots(2, 3)
+    # axs[0, 0].scatter(df_wec_opt.m, df_wec_opt.vel_max)  # Top-left
+    # axs[0,0].scatter(df_wec_max.m, df_wec_max.vel_max, label="Maximum")
+    # axs[0,0].set_xlabel("Effective Mass")
+    # axs[0,0].set_ylabel("Average System Velocity")
+
+    # axs[0, 1].scatter(df_wec_opt.k, df_wec_opt.vel_max) # Top-right
+    # axs[0,1].scatter(df_wec_max.k, df_wec_max.vel_max, label="Maximum")
+    # axs[0,1].set_xlabel("Effective Spring Constant")
+    # axs[0,1].set_ylabel("Average System Velocity")
+
+    # axs[1, 0].scatter(df_wec_opt.c, df_wec_opt.vel_max) # Top-right
+    # axs[1,0].scatter(df_wec_max.c, df_wec_max.vel_max, label="Maximum")
+    # axs[1,0].set_xlabel("Effective Generator Damping")
+    # axs[1,0].set_ylabel("Average System Velocity")
+
+    # axs[1, 1].scatter(df_wec_opt.q, df_wec_opt.vel_max) # Top-right
+    # axs[1,1].scatter(df_wec_max.q, df_wec_max.vel_max, label="Maximum")
+    # axs[1,1].set_xlabel("Effective Drag")
+    # axs[1,1].set_ylabel("Average System Velocity")
+
+    # axs[1, 2].scatter(df_wec_opt.b, df_wec_opt.vel_max) # Top-right
+    # axs[1,2].scatter(df_wec_max.b, df_wec_max.vel_max, label="Maximum")
+    # axs[1,2].set_xlabel("Effective Buoyancy")
+    # axs[1,2].set_ylabel("Average System Velocity")
+    # plt.tight_layout()   
+    # plt.show()
+
+
+#find the average results across all realization
+average_results = results.mean()
+
+#plot system results across all realizations in addition to the mean across all realizations
+fig, axs = plt.subplots(2, 3)
+axs[0, 0].scatter(results.m, results.vel_max)  # Top-left
+axs[0,0].scatter(average_results.m, average_results.vel_max, label="Mean")
+axs[0,0].set_xlabel("Effective Mass")
+axs[0,0].set_ylabel("Average System Velocity")
+axs[0,0].legend()
+axs[0,0].set_xlim(100,10000)
+axs[0,0].set_ylim(0,5)
+
+axs[0, 1].scatter(results.k, results.vel_max) # Top-right
+axs[0,1].scatter(average_results.k, average_results.vel_max, label="Mean")
+axs[0,1].set_xlabel("Effective Spring Constant")
+axs[0,1].set_ylabel("Average System Velocity")
+axs[0,1].legend()
+axs[0,1].set_xlim(10,10000)
+axs[0,1].set_ylim(0,5)
+
+axs[1, 0].scatter(results.c, results.vel_max) # Top-right
+axs[1,0].scatter(average_results.c, average_results.vel_max, label="Mean")
+axs[1,0].set_xlabel("Effective Generator Damping")
+axs[1,0].set_ylabel("Average System Velocity")
+axs[1,0].legend()
+axs[1,0].set_xlim(1,100)
+axs[1,0].set_ylim(0,5)
+
+
+axs[1, 1].scatter(results.q, results.vel_max) # Top-right
+axs[1,1].scatter(average_results.q, average_results.vel_max, label="Mean")
+axs[1,1].set_xlabel("Effective Drag")
+axs[1,1].set_ylabel("Average System Velocity")
+axs[1,1].legend()
+axs[1,1].set_xlim(100,1000)
+axs[1,1].set_ylim(0,5)
+
+
+axs[1, 2].scatter(results.b, results.vel_max) # Top-right
+axs[1,2].scatter(average_results.b, average_results.vel_max, label="Mean")
+axs[1,2].set_xlabel("Effective Buoyancy")
+axs[1,2].set_ylabel("Average System Velocity")
+axs[1,2].legend()
+axs[1,2].set_xlim(10,100)
+axs[1,2].set_ylim(0,5)
+
+plt.tight_layout()   
+plt.show()
