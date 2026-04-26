@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use('TkAgg') # Or 'QtAgg' if you installed PyQt
 import matplotlib.pyplot as plt
 from gaussian_wave_model import gp_fit, optimize_hyperparameter, hyperparmeter_sweep, generate_waveform
+from superposition_wave_model import Distribution_manager, create_waveform
 DF = gr.Intention()
 pd.set_option('display.max_columns', None)
 
@@ -25,44 +26,66 @@ resolution = 20
 n_points = resolution*(end_time-start_time)
 
 #choose number of wave realizations to test
-n_realization = 20
+n_realization = 1
 
 #choose number of restarts to avoid local minima
-restarts = 25
+restarts = 2
+
+#chose wave generation method "GP" for Gaussian Process, "Superposition" for superposition of multiple waves
+wave_gen_method = "GP"
 
 ##END USER INPUT
 
 #generate time series
 t_span = np.linspace(start_time, end_time, n_points).reshape(-1, 1)
 
-##start GP fitting generation
+#check which wave generation method to use
+if wave_gen_method == "GP":
+    ##start GP fitting generation
+    print("Using a Gaussian Process to generate random waves")
 
-#package wave and time parameters
-wave_parameters = [wave_amplitude,wave_frequency,wave_phase_shift]
-time_series = [start_time,end_time,n_points]
+    #package wave and time parameters
+    wave_parameters = [wave_amplitude,wave_frequency,wave_phase_shift]
+    time_series = [start_time,end_time,n_points]
 
-#create discretized sine wave
-sine_wave = gp_fit(wave_parameters, time_series)
+    #create discretized sine wave
+    sine_wave = gp_fit(wave_parameters, time_series)
 
-#perform hyperparameter sweep
-df_cv_summary = hyperparmeter_sweep(sine_wave)
+    #perform hyperparameter sweep
+    df_cv_summary = hyperparmeter_sweep(sine_wave)
 
-#plot hyperparameter sweep results
-plt.fill_between(df_cv_summary.l, df_cv_summary.ndme_lo, df_cv_summary.ndme_hi, alpha=1/3)
-plt.plot(df_cv_summary.l, df_cv_summary.ndme_mu)
-plt.xscale('log')
-plt.yscale('log')
-plt.xlim(1e-3, 1e+1)
-plt.xlabel("Hyperparameter l (-)")
-plt.ylabel("Error metric")
-plt.show()
+    #plot hyperparameter sweep results
+    plt.fill_between(df_cv_summary.l, df_cv_summary.ndme_lo, df_cv_summary.ndme_hi, alpha=1/3)
+    plt.plot(df_cv_summary.l, df_cv_summary.ndme_mu)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim(1e-3, 1e+1)
+    plt.xlabel("Hyperparameter l (-)")
+    plt.ylabel("Error metric")
+    plt.show()
 
-##BEGIN USER INPUT
+    ##BEGIN USER INPUT
 
-#User chosen length scale parameter
-l = 0.5
+    #User chosen length scale parameter
+    l = 0.5
 
-##END USER INPUT
+    ##END USER INPUT
+elif wave_gen_method == "Superposition":
+    print("Using wave superposition to generate random waves")
+
+    ##BEGIN USER INPUT
+
+    #define the standard deviation of the wave's amplitude, frequency, and phase shift
+    amplitude_sd = 0.5
+    frequency_sd = 0.5
+    phase_shift_sd = 1
+
+    #choose the number of waves to superimpose on each other
+    n_samp = 10
+
+    ##END USER INPUT
+else:
+    raise ValueError("No wave generation method provided, or it is incorrect")
 
 #define empty dataframes to store results
 results = pd.DataFrame()
@@ -71,15 +94,28 @@ all_results = pd.DataFrame()
 #iterate through each realization
 for realization in range(n_realization):
 
-    #generate a random wave
-    random_wave = generate_waveform(l, t_span)
+    #check which wave generation method to use
+    if wave_gen_method == "GP":
+        #generate a random wave
+        random_wave = generate_waveform(l, t_span)
 
-    ##plot each generated random wave
-    # plt.plot(t_span, random_wave, label="Generated Wave")
-    # plt.xlabel("Time")
-    # plt.ylabel("Amplitude")
-    # plt.legend()
-    # plt.show()
+    elif wave_gen_method == "Superposition":
+
+        md_amplitude = Distribution_manager(wave_amplitude,amplitude_sd)
+        df_amplitude = md_amplitude.sample_dist(n_samp)
+        df_amplitude = df_amplitude.rename(columns={'y':'amplitude'})
+
+        md_frequency = Distribution_manager(wave_frequency,frequency_sd)
+        df_frequency = md_frequency.sample_dist(n_samp)
+        df_frequency = df_frequency.rename(columns={'y':'frequency'})
+
+        md_phase_shift = Distribution_manager(wave_phase_shift,phase_shift_sd)
+        df_phase_shift = md_phase_shift.sample_dist(n_samp)
+        df_phase_shift = df_phase_shift.rename(columns={'y':'phase_shift'})
+
+        df_wave_forms = pd.concat([df_amplitude, df_frequency, df_phase_shift], axis=1)
+
+        random_wave = create_waveform(df_wave_forms, t_span, n_points) / n_samp
 
     def solve (df):
         """
