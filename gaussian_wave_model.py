@@ -55,7 +55,7 @@ def hyperparmeter_sweep(discrete_function):
         df_cv = (
             discrete_function
             >> gr.tf_kfolds(
-                k=8, 
+                k= 12, 
                 ft=ft_gp(var=["x"], out=["y"], kernels=RBF(l, length_scale_bounds="fixed")), 
                 out=["y"],
                 summaries=dict(ndme=gr.ndme),
@@ -73,8 +73,6 @@ def hyperparmeter_sweep(discrete_function):
         >> gr.tf_group_by("l")
         >> gr.tf_summarize(
             ndme_mu=gr.median(DF.ndme_y),
-            ndme_lo=gr.quant(DF.ndme_y, p=0.25),
-            ndme_hi=gr.quant(DF.ndme_y, p=0.75),
         )
     )
 

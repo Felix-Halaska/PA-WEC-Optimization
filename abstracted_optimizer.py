@@ -12,11 +12,14 @@ from superposition_wave_model import Distribution_manager, create_waveform
 DF = gr.Intention()
 pd.set_option('display.max_columns', None)
 
+filename = input("Type filename for data to be saved under")
+#filename structure: wave_gen_method-n_realization-n_restart-amplitude-frequency-phase_shift
+
 ##BEGIN USER INPUT
 
 #define mean wave conditions
 wave_amplitude = 0.2
-wave_frequency = 1
+wave_frequency = 10
 wave_phase_shift = 0
 
 #define time to evaluate system response
@@ -26,15 +29,18 @@ resolution = 20
 n_points = resolution*(end_time-start_time)
 
 #choose number of wave realizations to test
-n_realization = 1
+n_realization = 10
 
 #choose number of restarts to avoid local minima
-restarts = 2
+restarts = 20
 
 #chose wave generation method "GP" for Gaussian Process, "Superposition" for superposition of multiple waves
 wave_gen_method = "GP"
 
 ##END USER INPUT
+
+#calculate acceleration amplitude
+#wave_amplitude = -wave_amplitude*wave_frequency**2
 
 #generate time series
 t_span = np.linspace(start_time, end_time, n_points).reshape(-1, 1)
@@ -67,7 +73,7 @@ if wave_gen_method == "GP":
     ##BEGIN USER INPUT
 
     #User chosen length scale parameter
-    l = 0.5
+    l = 0.029
 
     ##END USER INPUT
 elif wave_gen_method == "Superposition":
@@ -76,8 +82,8 @@ elif wave_gen_method == "Superposition":
     ##BEGIN USER INPUT
 
     #define the standard deviation of the wave's amplitude, frequency, and phase shift
-    amplitude_sd = 0.5
-    frequency_sd = 0.5
+    amplitude_sd = 0.2
+    frequency_sd = 0.2
     phase_shift_sd = 1
 
     #choose the number of waves to superimpose on each other
@@ -99,6 +105,9 @@ for realization in range(n_realization):
         #generate a random wave
         random_wave = generate_waveform(l, t_span)
 
+        plt.plot(t_span, random_wave)
+        plt.show
+
     elif wave_gen_method == "Superposition":
 
         md_amplitude = Distribution_manager(wave_amplitude,amplitude_sd)
@@ -115,7 +124,14 @@ for realization in range(n_realization):
 
         df_wave_forms = pd.concat([df_amplitude, df_frequency, df_phase_shift], axis=1)
 
+        print(df_wave_forms)
+        print(t_span)
+
         random_wave = create_waveform(df_wave_forms, t_span, n_points) / n_samp
+
+        print(random_wave)
+        plt.plot(t_span, random_wave)
+        plt.show()
 
     def solve (df):
         """
@@ -241,12 +257,14 @@ for realization in range(n_realization):
 
 
 #find the average results across all realization
-average_results = results.mean()
+#average_results = results.mean()
+
+results.to_csv(filename + '.csv')
 
 #plot system results across all realizations in addition to the mean across all realizations
 fig, axs = plt.subplots(2, 3)
 axs[0, 0].scatter(results.m, results.vel_max)  # Top-left
-axs[0,0].scatter(average_results.m, average_results.vel_max, label="Mean")
+#axs[0,0].scatter(average_results.m, average_results.vel_max, label="Mean")
 axs[0,0].set_xlabel("Effective Mass")
 axs[0,0].set_ylabel("Average System Velocity")
 axs[0,0].legend()
@@ -254,7 +272,7 @@ axs[0,0].set_xlim(100,10000)
 axs[0,0].set_ylim(0,5)
 
 axs[0, 1].scatter(results.k, results.vel_max) # Top-right
-axs[0,1].scatter(average_results.k, average_results.vel_max, label="Mean")
+#axs[0,1].scatter(average_results.k, average_results.vel_max, label="Mean")
 axs[0,1].set_xlabel("Effective Spring Constant")
 axs[0,1].set_ylabel("Average System Velocity")
 axs[0,1].legend()
@@ -262,7 +280,7 @@ axs[0,1].set_xlim(10,10000)
 axs[0,1].set_ylim(0,5)
 
 axs[1, 0].scatter(results.c, results.vel_max) # Top-right
-axs[1,0].scatter(average_results.c, average_results.vel_max, label="Mean")
+#axs[1,0].scatter(average_results.c, average_results.vel_max, label="Mean")
 axs[1,0].set_xlabel("Effective Generator Damping")
 axs[1,0].set_ylabel("Average System Velocity")
 axs[1,0].legend()
@@ -271,7 +289,7 @@ axs[1,0].set_ylim(0,5)
 
 
 axs[1, 1].scatter(results.q, results.vel_max) # Top-right
-axs[1,1].scatter(average_results.q, average_results.vel_max, label="Mean")
+#axs[1,1].scatter(average_results.q, average_results.vel_max, label="Mean")
 axs[1,1].set_xlabel("Effective Drag")
 axs[1,1].set_ylabel("Average System Velocity")
 axs[1,1].legend()
@@ -280,7 +298,7 @@ axs[1,1].set_ylim(0,5)
 
 
 axs[1, 2].scatter(results.b, results.vel_max) # Top-right
-axs[1,2].scatter(average_results.b, average_results.vel_max, label="Mean")
+#axs[1,2].scatter(average_results.b, average_results.vel_max, label="Mean")
 axs[1,2].set_xlabel("Effective Buoyancy")
 axs[1,2].set_ylabel("Average System Velocity")
 axs[1,2].legend()

@@ -95,21 +95,31 @@ def create_waveform(df, t_span, n_points):
 #         >> gr.tf_mutate(y=0.2*gr.sin(1 * DF.x + 0))
 #     )
 
-# n_samp = 10
+# wave_amplitude = 0.2
+# wave_frequency = 10
+# wave_phase_shift = 0
 
-# md_amplitude = Distribution_manager(0.2,0.1)
+# amplitude_sd = 0.2
+# frequency_sd = 0.2
+# phase_shift_sd = 1
+
+# n_samp = 100
+
+# md_amplitude = Distribution_manager(0.2,0.2)
 # df_amplitude = md_amplitude.sample_dist(n_samp)
 # df_amplitude = df_amplitude.rename(columns={'y':'amplitude'})
 
-# md_frequency = Distribution_manager(1,0.1)
+# md_frequency = Distribution_manager(1,0.2)
 # df_frequency = md_frequency.sample_dist(n_samp)
 # df_frequency = df_frequency.rename(columns={'y':'frequency'})
 
-# md_phase_shift = Distribution_manager(0,0.1)
+# md_phase_shift = Distribution_manager(0,1)
 # df_phase_shift = md_phase_shift.sample_dist(n_samp)
 # df_phase_shift = df_phase_shift.rename(columns={'y':'phase_shift'})
 
 # df_wave_forms = pd.concat([df_amplitude, df_frequency, df_phase_shift], axis=1)
+# print(df_wave_forms)
+# print(t_span)
 
 # # print(df_amplitude)
 # # print(df_frequency)
@@ -117,19 +127,39 @@ def create_waveform(df, t_span, n_points):
 # # print(df_wave_forms)
 
 # final_form = create_waveform(df_wave_forms, t_span, n_points) / n_samp
-# final_form = final_form[0]
+# #final_form = final_form[0]
 # # final_form = np.transpose(final_form)
 
-# print(type(final_form))
-# print(final_form)
-# print(final_form.shape)
+# # print(type(final_form))
+# # print(final_form)
+# # print(final_form.shape)
 
-# # plt.plot(t_span, final_form)
-# # plt.scatter(df_sine.x, df_sine.y, color="black")
-# # plt.xlabel("Time")
-# # plt.ylabel("Wave Height")
-# # plt.show()
+# plt.plot(t_span, final_form)
+# plt.scatter(df_sine.x, df_sine.y, color="black")
+# plt.xlabel("Time")
+# plt.ylabel("Wave Height")
+# plt.show()
 
 # # plt.scatter(amplitude_sample.id, amplitude_sample.amplitude)
+# # plt.show()
+
+# # md_amplitude = Distribution_manager(wave_amplitude,amplitude_sd)
+# # df_amplitude = md_amplitude.sample_dist(n_samp)
+# # df_amplitude = df_amplitude.rename(columns={'y':'amplitude'})
+
+# # md_frequency = Distribution_manager(wave_frequency,frequency_sd)
+# # df_frequency = md_frequency.sample_dist(n_samp)
+# # df_frequency = df_frequency.rename(columns={'y':'frequency'})
+
+# # md_phase_shift = Distribution_manager(wave_phase_shift,phase_shift_sd)
+# # df_phase_shift = md_phase_shift.sample_dist(n_samp)
+# # df_phase_shift = df_phase_shift.rename(columns={'y':'phase_shift'})
+
+# # df_wave_forms = pd.concat([df_amplitude, df_frequency, df_phase_shift], axis=1)
+
+# # random_wave = create_waveform(df_wave_forms, t_span, n_points) / n_samp
+
+# # #sprint(random_wave)
+# # plt.plot(t_span, random_wave)
 # # plt.show()
     

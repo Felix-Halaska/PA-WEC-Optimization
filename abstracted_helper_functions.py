@@ -23,7 +23,7 @@ def wec_ode(t_span,z,m,b,k,c,q,wave_interpolation):
     #define gravitational constant
     g = 9.81
 
-    return [z[1], 1/m*(wave_height + b*g - m*g - k*z[0] - c*z[1] + q*z[1]**2 )]
+    return [z[1], 1/m*(wave_height + b*g - m*g - k*z[0] - c*z[1] + q*z[1]*abs(z[1]) )]
 
 
 def evaluate_ode(t_span,df,t_md, md_sea):
@@ -46,8 +46,12 @@ def evaluate_ode(t_span,df,t_md, md_sea):
     c = df.c.squeeze()
     q = df.q.squeeze()
 
+    # print(t_md)
+    # print(md_sea)
+
     #create dataframe defining the wave function with both time and wave magnitude
     sea_conditions = gr.df_make(x=t_md.ravel(), y=md_sea.ravel())
+    #sea_conditions = gr.df_make(x=t_md, y=md_sea)
 
     #interpolate discretized wave function to create callable continuous function
     wave_interpolation = interp1d(sea_conditions.x, sea_conditions.y, kind="linear")
